@@ -12,6 +12,8 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 
+import os
+
 DEVICE = 'cuda'
 
 class ResnetEncoder(Module):
@@ -152,8 +154,8 @@ class ContextPredictionModel(Module):
 
         prediction_list = []
 
-        for y1 in range(4):
-            for x1 in range(4):
+        for y1 in range(5):
+            for x1 in range(5):
                 y2 = y1 + 2
                 x2 = x1 + 2
 
@@ -172,40 +174,82 @@ class ContextPredictionModel(Module):
 
                 #predict down
 
-                for steps_up in range(3):
-                    y3 = y2 + (steps_up+1)
-                    if y3 > 6:
-                        break
+                if y2 == 2 or y2 == 3:
+                    for steps_y_plus in range(3):
+                        y3 = y2 + (steps_y_plus+1)
+                        if y3 > 6:
+                            break
 
-                    #print(f"pred for y3:{y3} x1+1:{x1+1}")
+                        # print(f"y+ pred for y1:{y1} y2:{y2} x1:{x1} x2:{x2} y3:{y3}")
 
-                    prediction = self.prediction_weights[0][steps_up].forward(context)
-                    #print(f"predfiction shape on context {prediction.shape}")
-                    prediction_list.append(
-                        dict(
-                            y=y3,
-                            x=x1+1,
-                            prediction=prediction
+                        prediction = self.prediction_weights[0][steps_y_plus].forward(context)
+                        #print(f"predfiction shape on context {prediction.shape}")
+                        prediction_list.append(
+                            dict(
+                                y=y3,
+                                x=x1+1,
+                                prediction=prediction,
+                                pred_class=f"y+{steps_y_plus+1}",
+                            )
                         )
-                    )
 
 
-                for steps_right in range(3):
-                    x3 = x2 + (steps_right+1)
-                    if x3 > 6:
-                        break
+                if y1 == 3 or y1 == 4:
+                    for steps_y_minus in range(3):
+                        y3 = y1 - (steps_y_minus+1)
+                        if y3 < 0:
+                            break
 
-                    #print(f"pred for y1+1:{y1+1} x3:{x3}")
-                    prediction = self.prediction_weights[1][steps_right].forward(context)
-                    #print(f"predfiction shape on context {prediction.shape}")
-                    prediction_list.append(
-                        dict(
-                            y=y1+1,
-                            x=x3,
-                            prediction=prediction
+                        # print(f"y- pred for y1:{y1} y2:{y2} x1:{x1} x2:{x2} y3:{y3}")
+
+                        prediction = self.prediction_weights[1][steps_y_minus].forward(context)
+                        #print(f"predfiction shape on context {prediction.shape}")
+                        prediction_list.append(
+                            dict(
+                                y=y3,
+                                x=x1+1,
+                                prediction=prediction,
+                                pred_class=f"y-{steps_y_minus+1}",
+                            )
                         )
-                    )
 
+
+                if x2 == 2 or x2 == 3:
+                    for steps_x_plus in range(3):
+                        x3 = x2 + (steps_x_plus+1)
+                        if x3 > 6:
+                            break
+
+                        # print(f"x+ pred for y1:{y1} y2:{y2} x1:{x1} x2:{x2} x3:{x3}")
+                        prediction = self.prediction_weights[2][steps_x_plus].forward(context)
+                        #print(f"predfiction shape on context {prediction.shape}")
+                        prediction_list.append(
+                            dict(
+                                y=y1+1,
+                                x=x3,
+                                prediction=prediction,
+                                pred_class=f"x+{steps_x_plus+1}",
+                            )
+                        )
+
+
+                if x1 == 3 or x1 == 4:
+                    for steps_x_minus in range(3):
+                        x3 = x1 - (steps_x_minus+1)
+                        if x3 < 0:
+                            break
+
+                        # print(f"x- pred for y1:{y1} y2:{y2} x1:{x1} x2{x2} x3:{x3}")
+                        prediction = self.prediction_weights[3][steps_x_minus].forward(context)
+                        #print(f"predfiction shape on context {prediction.shape}")
+                        prediction_list.append(
+                            dict(
+                                y=y1+1,
+                                x=x3,
+                                prediction=prediction,
+                                pred_class=f"x-{steps_x_minus+1}",
+                            )
+                        )
 
         return prediction_list
 
@@ -221,12 +265,21 @@ class ClassificationModel(Module):
 
 
 NUM_CLASSES = 100
-THE_BATCH_SIZE = 10
+THE_BATCH_SIZE = 16
 BATCH_SIZE = 2
 data_path = "/home/martin/ai/ImageNet-datasets-downloader/images_4/imagenet_images"
 dataset_train, dataset_test = get_imagenet_datasets(data_path, num_classes = NUM_CLASSES)
 
-NUM_RANDOM_PATCHES = 10
+run_idx = 1
+while os.path.isdir(f"models_{run_idx}"):
+    run_idx += 1
+
+models_path = f"models_{run_idx}"
+os.mkdir(models_path)
+
+print(f"STARTING RUN {run_idx}")
+
+NUM_RANDOM_PATCHES = 15
 random_patch_loader = DataLoader(dataset_train, NUM_RANDOM_PATCHES, shuffle=True)
 
 def get_random_patches():
@@ -262,27 +315,43 @@ def get_random_patches():
 data_loader_train = DataLoader(dataset_train, BATCH_SIZE, shuffle = True)
 data_loader_test = DataLoader(dataset_test, BATCH_SIZE, shuffle = True)
 
+def inspect_model(model):
+    param_count = 0
+    for param_tensor_str in model.state_dict():
+        tensor_size = model.state_dict()[param_tensor_str].size()
+        print(f"{param_tensor_str} size {tensor_size}")
+        param_count += model.state_dict()[param_tensor_str].numel()
+
+
+    print(f"Number of parameters: {param_count}")
+
 resnet_encoder = ResnetEncoder().to(DEVICE)
 context_predictor_model = ContextPredictionModel(in_channels=1024).to(DEVICE)
 
-optimizer = torch.optim.Adam(params =
-                             itertools.chain(resnet_encoder.parameters(),
-                                             context_predictor_model.parameters()),
-                             lr=0.0001)
+inspect_model(resnet_encoder)
+inspect_model(context_predictor_model)
+
+optimizer = torch.optim.Adam(params = itertools.chain(resnet_encoder.parameters(), context_predictor_model.parameters()), lr=0.0001)
 
 def cos_loss(a,b):
-
     dot = torch.sum(a * b, dim=1)
     aa = torch.sum((a**2),dim=1)**0.5
     bb = torch.sum((b**2),dim=1)**0.5
-    dot_norm = dot/(aa*bb)
+    dot_norm = dot/(torch.max(aa*bb))
     ret = torch.exp(dot_norm)
-
     return ret
+
+def mse(a,b):
+    return torch.mean((a-b)**2)
+
 
 torch.autograd.set_detect_anomaly(True)
 
 batches_processed = 0
+batch_loss = 0
+best_batch_loss = 10000000000
+
+z_vect_similarity = dict()
 
 for batch in data_loader_train:
 
@@ -335,6 +404,17 @@ for batch in data_loader_train:
 
         target = patches_encoded[:,:,p['y'],p['x']]
         pred = p['prediction']
+        pred_class = p['pred_class']
+
+        # print(f"pred.shape {pred.shape}")
+        # print(f"target.shape {target.shape}")
+
+        cos_loss_val = cos_loss(pred.detach().to('cpu'), target.detach().to('cpu'))
+
+        if pred_class in z_vect_similarity:
+            z_vect_similarity[pred_class] = torch.cat([z_vect_similarity[pred_class], cos_loss_val], dim = 0)
+        else:
+            z_vect_similarity[pred_class] = cos_loss_val
 
         #print(f"target shape {target.shape} pred shape {pred.shape}")
 
@@ -343,6 +423,19 @@ for batch in data_loader_train:
 
         for random_patch_idx in range(NUM_RANDOM_PATCHES):
             divisor = divisor + cos_loss(pred, enc_random_patches[random_patch_idx:random_patch_idx+1])
+
+            if random_patch_idx == 0:
+
+                pred_class = pred_class+"b"
+
+                cos_loss_val = cos_loss(pred.detach().detach().to('cpu'), enc_random_patches[random_patch_idx:random_patch_idx+1].detach().to('cpu'))
+
+                if pred_class in z_vect_similarity:
+                    z_vect_similarity[pred_class] = torch.cat([z_vect_similarity[pred_class], cos_loss_val], dim = 0)
+                else:
+                    z_vect_similarity[pred_class] = cos_loss_val
+
+           
             # divisor += cos_loss(pred, enc_random_patches[random_patch_idx:random_patch_idx+1])
 
         losses.append(-torch.log(good_term/divisor))
@@ -352,13 +445,30 @@ for batch in data_loader_train:
 
     batches_processed += BATCH_SIZE
 
+    batch_loss += loss.detach().to('cpu')
+
     if batches_processed >= THE_BATCH_SIZE:
         batches_processed = 0
+
         optimizer.step()
         optimizer.zero_grad()
-        print("BACKPROP")
+        print(f"Loss: {batch_loss}")
 
-    print(f"Loss: {loss.detach().to('cpu')}")
+        batch_loss = 0
+
+        torch.save(resnet_encoder.state_dict(), os.path.join(models_path, "last_resnet_ecoder.pt"))
+        torch.save(context_predictor_model.state_dict(), os.path.join(models_path, "last_context_predictor_model.pt"))
+
+        if best_batch_loss > batch_loss:
+            best_batch_loss = batch_loss
+            torch.save(resnet_encoder.state_dict(), os.path.join(models_path, "best_resnet_ecoder.pt"))
+            torch.save(context_predictor_model.state_dict(), os.path.join(models_path, "best_context_predictor_model.pt"))
+
+        for key, cos_similarity_tensor in z_vect_similarity.items():
+            print(f"Mean cos_sim for class {key} is {cos_similarity_tensor.mean()} . Number: {cos_similarity_tensor.size()}")
+
+        z_vect_similarity = dict()
+
 
 
 #Training the encoder network with the prediction task
