@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 from torch.nn import Module
-from contrastive_predictive_coding.resnet_blocks import ResNetBottleneckBlock
-from contrastive_predictive_coding.imagenet_dataset import get_imagenet_datasets
+from resnet_blocks import ResNetBottleneckBlock
+from imagenet_dataset import get_imagenet_datasets
 
 from torch.utils.data import DataLoader
 
@@ -12,7 +12,7 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 
-DEVICE = 'cpu'
+DEVICE = 'cuda'
 
 class ResnetEncoder(Module):
     def __init__(self):
@@ -24,7 +24,7 @@ class ResnetEncoder(Module):
         # Input is 3 x 64 x 64
         # prep -> 256 x 32 x 32
 
-        self.conv_blocks = [3,4,5] #256x32x32 -> 512x16x16 -> 1024x8x8
+        self.conv_blocks = [10,10,6] #256x32x32 -> 512x16x16 -> 1024x8x8
         self.num_blocks = len(self.conv_blocks)
         self.start_channels = 256
 
@@ -221,11 +221,12 @@ class ClassificationModel(Module):
 
 
 NUM_CLASSES = 100
+THE_BATCH_SIZE = 10
 BATCH_SIZE = 2
-data_path = "/Users/martinsf/ai/deep_learning_projects/data/imagenet_images"
+data_path = "/home/martin/ai/ImageNet-datasets-downloader/images_4/imagenet_images"
 dataset_train, dataset_test = get_imagenet_datasets(data_path, num_classes = NUM_CLASSES)
 
-NUM_RANDOM_PATCHES = 50
+NUM_RANDOM_PATCHES = 10
 random_patch_loader = DataLoader(dataset_train, NUM_RANDOM_PATCHES, shuffle=True)
 
 def get_random_patches():
@@ -264,13 +265,24 @@ data_loader_test = DataLoader(dataset_test, BATCH_SIZE, shuffle = True)
 resnet_encoder = ResnetEncoder().to(DEVICE)
 context_predictor_model = ContextPredictionModel(in_channels=1024).to(DEVICE)
 
-optimizer = torch.optim.Adam(params = itertools.chain(resnet_encoder.parameters(), context_predictor_model.parameters()), lr=0.0001)
+optimizer = torch.optim.Adam(params =
+                             itertools.chain(resnet_encoder.parameters(),
+                                             context_predictor_model.parameters()),
+                             lr=0.0001)
 
 def cos_loss(a,b):
-    ret = torch.exp(torch.sum(a*b, dim=1))
+
+    dot = torch.sum(a * b, dim=1)
+    aa = torch.sum((a**2),dim=1)**0.5
+    bb = torch.sum((b**2),dim=1)**0.5
+    dot_norm = dot/(aa*bb)
+    ret = torch.exp(dot_norm)
+
     return ret
 
 torch.autograd.set_detect_anomaly(True)
+
+batches_processed = 0
 
 for batch in data_loader_train:
 
@@ -309,7 +321,8 @@ for batch in data_loader_train:
     patches_encoded = patches_encoded.permute(0,3,1,2)
 
     random_patches = get_random_patches().to(DEVICE)
-    enc_random_patches = resnet_encoder.forward(random_patches).detach()
+    # enc_random_patches = resnet_encoder.forward(random_patches).detach()
+    enc_random_patches = resnet_encoder.forward(random_patches)
     enc_random_patches = enc_random_patches.squeeze()
 
     #print(f"shape after reshape{patches_encoded.shape}")
@@ -336,8 +349,14 @@ for batch in data_loader_train:
 
     loss = torch.sum(torch.cat(losses))
     loss.backward()
-    optimizer.step()
-    optimizer.zero_grad()
+
+    batches_processed += BATCH_SIZE
+
+    if batches_processed >= THE_BATCH_SIZE:
+        batches_processed = 0
+        optimizer.step()
+        optimizer.zero_grad()
+        print("BACKPROP")
 
     print(f"Loss: {loss.detach().to('cpu')}")
 
