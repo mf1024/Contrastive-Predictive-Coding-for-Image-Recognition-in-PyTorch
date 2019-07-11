@@ -329,12 +329,14 @@ def inspect_model(model):
 resnet_encoder = ResnetEncoder().to(DEVICE)
 context_predictor_model = ContextPredictionModel(in_channels=1024).to(DEVICE)
 
-encoder_load_model_path = "models_12/last_resnet_ecoder.pt"
+# encoder_load_model_path = "models_12/last_resnet_ecoder.pt"
+encoder_load_model_path = None
 if encoder_load_model_path is not None:
     checkpoint = torch.load(encoder_load_model_path)
     resnet_encoder.load_state_dict(checkpoint)
 
-context_predictor_load_model_path = "models_12/last_context_predictor_model.pt"
+# context_predictor_load_model_path = "models_12/last_context_predictor_model.pt"
+context_predictor_load_model_path = None
 if context_predictor_load_model_path is not None:
     checkpoint = torch.load(context_predictor_load_model_path)
     context_predictor_model.load_state_dict(checkpoint)
@@ -343,18 +345,22 @@ if context_predictor_load_model_path is not None:
 inspect_model(resnet_encoder)
 inspect_model(context_predictor_model)
 
-optimizer = torch.optim.Adam(params = itertools.chain(resnet_encoder.parameters(), context_predictor_model.parameters()), lr=0.0001)
+optimizer = torch.optim.Adam(params = itertools.chain(resnet_encoder.parameters(), context_predictor_model.parameters()), lr=0.0005)
 
 def cos_loss(a,b):
+
     dot = torch.sum(a * b, dim=1)
     aa = torch.sum((a**2),dim=1)**0.5
     bb = torch.sum((b**2),dim=1)**0.5
-    dot_norm = dot/(torch.max(aa*bb))
+    dot_norm = dot/(aa*bb)
     ret = torch.exp(dot_norm)
     return ret
 
-def mse(a,b):
-    return torch.mean((a-b)**2)
+def norm_euclidian(a,b):
+    aa = (torch.sum((a**2),dim=1)**0.5).unsqueeze(dim=1)
+    bb = (torch.sum((b**2),dim=1)**0.5).unsqueeze(dim=1)
+
+    return (torch.sum(((a/aa-b/bb)**2),dim=1)**0.5)
 
 
 torch.autograd.set_detect_anomaly(True)
@@ -422,9 +428,12 @@ for batch in data_loader_train:
         # print(f"target.shape {target.shape}")
 
         cos_loss_val = cos_loss(pred.detach().to('cpu'), target.detach().to('cpu'))
+        euc_loss_val = norm_euclidian(pred.detach().to('cpu'), target.detach().to('cpu'))
 
         if pred_class in z_vect_similarity:
             z_vect_similarity[pred_class] = torch.cat([z_vect_similarity[pred_class], cos_loss_val], dim = 0)
+            # print(f"gut cos_sim {cos_loss_val}")
+            # print(f"gut mse: {euc_loss_val}")
         else:
             z_vect_similarity[pred_class] = cos_loss_val
 
@@ -443,9 +452,12 @@ for batch in data_loader_train:
                 pred_class = pred_class+"b"
 
                 cos_loss_val = cos_loss(pred.detach().detach().to('cpu'), enc_random_patches[random_patch_idx:random_patch_idx+1].detach().to('cpu'))
+                euc_loss_val = norm_euclidian(pred.detach().detach().to('cpu'), enc_random_patches[random_patch_idx:random_patch_idx+1].detach().to('cpu'))
 
                 if pred_class in z_vect_similarity:
                     z_vect_similarity[pred_class] = torch.cat([z_vect_similarity[pred_class], cos_loss_val], dim = 0)
+                    # print(f"bad cos_sim {cos_loss_val}")
+                    # print(f"bad mse: {euc_loss_val}")
                 else:
                     z_vect_similarity[pred_class] = cos_loss_val
 
