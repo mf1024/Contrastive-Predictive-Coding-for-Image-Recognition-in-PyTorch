@@ -13,6 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import os
+import datetime
 
 DEVICE = 'cuda'
 
@@ -26,7 +27,7 @@ class ResnetEncoder(Module):
         # Input is 3 x 64 x 64
         # prep -> 256 x 32 x 32
 
-        self.conv_blocks = [10,10,6] #256x32x32 -> 512x16x16 -> 1024x8x8
+        self.conv_blocks = [10,10,10] #256x32x32 -> 512x16x16 -> 1024x8x8
         self.num_blocks = len(self.conv_blocks)
         self.start_channels = 256
 
@@ -328,6 +329,17 @@ def inspect_model(model):
 resnet_encoder = ResnetEncoder().to(DEVICE)
 context_predictor_model = ContextPredictionModel(in_channels=1024).to(DEVICE)
 
+encoder_load_model_path = "models_12/last_resnet_ecoder.pt"
+if encoder_load_model_path is not None:
+    checkpoint = torch.load(encoder_load_model_path)
+    resnet_encoder.load_state_dict(checkpoint)
+
+context_predictor_load_model_path = "models_12/last_context_predictor_model.pt"
+if context_predictor_load_model_path is not None:
+    checkpoint = torch.load(context_predictor_load_model_path)
+    context_predictor_model.load_state_dict(checkpoint)
+
+
 inspect_model(resnet_encoder)
 inspect_model(context_predictor_model)
 
@@ -421,10 +433,12 @@ for batch in data_loader_train:
         good_term = cos_loss(pred, target)
         divisor = cos_loss(pred, target)
 
+        store_similarity_idx = random.randint(0,NUM_RANDOM_PATCHES-1)
+
         for random_patch_idx in range(NUM_RANDOM_PATCHES):
             divisor = divisor + cos_loss(pred, enc_random_patches[random_patch_idx:random_patch_idx+1])
 
-            if random_patch_idx == 0:
+            if random_patch_idx == store_similarity_idx:
 
                 pred_class = pred_class+"b"
 
@@ -452,7 +466,7 @@ for batch in data_loader_train:
 
         optimizer.step()
         optimizer.zero_grad()
-        print(f"Loss: {batch_loss}")
+        print(f"{datetime.datetime.now()} Loss: {batch_loss}")
 
         batch_loss = 0
 
@@ -475,7 +489,7 @@ for batch in data_loader_train:
 
 #   For image in data
 
-#   TRAINING OF THE ENCODER
+#   TRAINING OF THE ENCODER/
 
 #   keep some pool for random patches
 
@@ -501,3 +515,15 @@ for batch in data_loader_train:
 
 # TODO: Write custom PyTorch dataset that will prepare unlabeled dataset and labeled dataset for Semi-supervised settings
 # labeled, unlabeled, training = get_imgaenet_semi_supervised_learning_datasets()
+
+# TODO do we need to run backprop trough the random patches ???? Probably need to check in paper.
+# Also need to check how Torch runs the backprop
+
+# TODO Write classification model to put on top of the context model. 
+
+# TODO Training scheduling - when it converges - try to add more negative samples, or try changing learning rate
+# TODO Try to implement SGD ?
+
+# TODO: How to use batch norm correctly when collecting the gradients from smaller batches of two??
+
+# TODO: Data augmentation for patches, to remove simple cues for predicting following images - like straight lines and gradually changing colors.
