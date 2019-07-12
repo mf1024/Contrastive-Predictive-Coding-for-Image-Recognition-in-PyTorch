@@ -519,114 +519,115 @@ def classification():
             res_classification_model.train()
 
 
-classification()
+def predictive_encoder_training():
+    batches_processed = 0
+    batch_loss = 0
+    best_batch_loss = 10000000000
+
+    z_vect_similarity = dict()
+
+    for batch in data_loader_train:
+
+        # plt.imshow(img_arr.permute(1,2,0))
+        # fig, axes = plt.subplots(7,7)
+
+        img_batch = batch['image'].to(DEVICE)
+        patch_batch = get_patches_from_image_batch(img_batch)
+
+        patches_encoded = resnet_encoder.forward(patch_batch)
+        patches_encoded = patches_encoded.view(BATCH_SIZE, 7,7,-1)
+        patches_encoded = patches_encoded.permute(0,3,1,2)
+
+        random_patches = get_random_patches().to(DEVICE)
+        # enc_random_patches = resnet_encoder.forward(random_patches).detach()
+        enc_random_patches = resnet_encoder.forward(random_patches)
+
+        #print(f"shape after reshape{patches_encoded.shape}")
+
+        predictions = context_predictor_model.forward(patches_encoded)
+
+        losses = []
+
+        for p in predictions:
+
+            target = patches_encoded[:,:,p['y'],p['x']]
+            pred = p['prediction']
+            pred_class = p['pred_class']
+
+            # print(f"pred.shape {pred.shape}")
+            # print(f"target.shape {target.shape}")
+
+            cos_loss_val = cos_loss(pred.detach().to('cpu'), target.detach().to('cpu'))
+            euc_loss_val = norm_euclidian(pred.detach().to('cpu'), target.detach().to('cpu'))
+
+            if pred_class in z_vect_similarity:
+                z_vect_similarity[pred_class] = torch.cat([z_vect_similarity[pred_class], cos_loss_val], dim = 0)
+                # print(f"gut cos_sim {cos_loss_val}")
+                # print(f"gut mse: {euc_loss_val}")
+            else:
+                z_vect_similarity[pred_class] = cos_loss_val
+
+            #print(f"target shape {target.shape} pred shape {pred.shape}")
+
+            good_term = cos_loss(pred, target)
+            divisor = cos_loss(pred, target)
+
+            store_similarity_idx = random.randint(0,NUM_RANDOM_PATCHES-1)
+
+            for random_patch_idx in range(NUM_RANDOM_PATCHES):
+                divisor = divisor + cos_loss(pred, enc_random_patches[random_patch_idx:random_patch_idx+1])
+
+                if random_patch_idx == store_similarity_idx:
+
+                    pred_class = pred_class+"b"
+
+                    cos_loss_val = cos_loss(pred.detach().detach().to('cpu'), enc_random_patches[random_patch_idx:random_patch_idx+1].detach().to('cpu'))
+                    euc_loss_val = norm_euclidian(pred.detach().detach().to('cpu'), enc_random_patches[random_patch_idx:random_patch_idx+1].detach().to('cpu'))
+
+                    if pred_class in z_vect_similarity:
+                        z_vect_similarity[pred_class] = torch.cat([z_vect_similarity[pred_class], cos_loss_val], dim = 0)
+                        # print(f"bad cos_sim {cos_loss_val}")
+                        # print(f"bad mse: {euc_loss_val}")
+                    else:
+                        z_vect_similarity[pred_class] = cos_loss_val
 
 
-batches_processed = 0
-batch_loss = 0
-best_batch_loss = 10000000000
+                # divisor += cos_loss(pred, enc_random_patches[random_patch_idx:random_patch_idx+1])
 
-z_vect_similarity = dict()
+            losses.append(-torch.log(good_term/divisor))
 
-for batch in data_loader_train:
+        loss = torch.sum(torch.cat(losses))
+        loss.backward()
 
-    # plt.imshow(img_arr.permute(1,2,0))
-    # fig, axes = plt.subplots(7,7)
+        batches_processed += BATCH_SIZE
 
-    img_batch = batch['image'].to(DEVICE)
-    patch_batch = get_patches_from_image_batch(img_batch)
+        batch_loss += loss.detach().to('cpu')
 
-    patches_encoded = resnet_encoder.forward(patch_batch)
-    patches_encoded = patches_encoded.view(BATCH_SIZE, 7,7,-1)
-    patches_encoded = patches_encoded.permute(0,3,1,2)
+        if batches_processed >= THE_BATCH_SIZE:
+            batches_processed = 0
 
-    random_patches = get_random_patches().to(DEVICE)
-    # enc_random_patches = resnet_encoder.forward(random_patches).detach()
-    enc_random_patches = resnet_encoder.forward(random_patches)
+            optimizer.step()
+            optimizer.zero_grad()
+            print(f"{datetime.datetime.now()} Loss: {batch_loss}")
 
-    #print(f"shape after reshape{patches_encoded.shape}")
+            batch_loss = 0
 
-    predictions = context_predictor_model.forward(patches_encoded)
+            torch.save(resnet_encoder.state_dict(), os.path.join(models_path, "last_resnet_ecoder.pt"))
+            torch.save(context_predictor_model.state_dict(), os.path.join(models_path, "last_context_predictor_model.pt"))
 
-    losses = []
+            if best_batch_loss > batch_loss:
+                best_batch_loss = batch_loss
+                torch.save(resnet_encoder.state_dict(), os.path.join(models_path, "best_resnet_ecoder.pt"))
+                torch.save(context_predictor_model.state_dict(), os.path.join(models_path, "best_context_predictor_model.pt"))
 
-    for p in predictions:
+            for key, cos_similarity_tensor in z_vect_similarity.items():
+                print(f"Mean cos_sim for class {key} is {cos_similarity_tensor.mean()} . Number: {cos_similarity_tensor.size()}")
 
-        target = patches_encoded[:,:,p['y'],p['x']]
-        pred = p['prediction']
-        pred_class = p['pred_class']
+            z_vect_similarity = dict()
 
-        # print(f"pred.shape {pred.shape}")
-        # print(f"target.shape {target.shape}")
 
-        cos_loss_val = cos_loss(pred.detach().to('cpu'), target.detach().to('cpu'))
-        euc_loss_val = norm_euclidian(pred.detach().to('cpu'), target.detach().to('cpu'))
-
-        if pred_class in z_vect_similarity:
-            z_vect_similarity[pred_class] = torch.cat([z_vect_similarity[pred_class], cos_loss_val], dim = 0)
-            # print(f"gut cos_sim {cos_loss_val}")
-            # print(f"gut mse: {euc_loss_val}")
-        else:
-            z_vect_similarity[pred_class] = cos_loss_val
-
-        #print(f"target shape {target.shape} pred shape {pred.shape}")
-
-        good_term = cos_loss(pred, target)
-        divisor = cos_loss(pred, target)
-
-        store_similarity_idx = random.randint(0,NUM_RANDOM_PATCHES-1)
-
-        for random_patch_idx in range(NUM_RANDOM_PATCHES):
-            divisor = divisor + cos_loss(pred, enc_random_patches[random_patch_idx:random_patch_idx+1])
-
-            if random_patch_idx == store_similarity_idx:
-
-                pred_class = pred_class+"b"
-
-                cos_loss_val = cos_loss(pred.detach().detach().to('cpu'), enc_random_patches[random_patch_idx:random_patch_idx+1].detach().to('cpu'))
-                euc_loss_val = norm_euclidian(pred.detach().detach().to('cpu'), enc_random_patches[random_patch_idx:random_patch_idx+1].detach().to('cpu'))
-
-                if pred_class in z_vect_similarity:
-                    z_vect_similarity[pred_class] = torch.cat([z_vect_similarity[pred_class], cos_loss_val], dim = 0)
-                    # print(f"bad cos_sim {cos_loss_val}")
-                    # print(f"bad mse: {euc_loss_val}")
-                else:
-                    z_vect_similarity[pred_class] = cos_loss_val
-
-           
-            # divisor += cos_loss(pred, enc_random_patches[random_patch_idx:random_patch_idx+1])
-
-        losses.append(-torch.log(good_term/divisor))
-
-    loss = torch.sum(torch.cat(losses))
-    loss.backward()
-
-    batches_processed += BATCH_SIZE
-
-    batch_loss += loss.detach().to('cpu')
-
-    if batches_processed >= THE_BATCH_SIZE:
-        batches_processed = 0
-
-        optimizer.step()
-        optimizer.zero_grad()
-        print(f"{datetime.datetime.now()} Loss: {batch_loss}")
-
-        batch_loss = 0
-
-        torch.save(resnet_encoder.state_dict(), os.path.join(models_path, "last_resnet_ecoder.pt"))
-        torch.save(context_predictor_model.state_dict(), os.path.join(models_path, "last_context_predictor_model.pt"))
-
-        if best_batch_loss > batch_loss:
-            best_batch_loss = batch_loss
-            torch.save(resnet_encoder.state_dict(), os.path.join(models_path, "best_resnet_ecoder.pt"))
-            torch.save(context_predictor_model.state_dict(), os.path.join(models_path, "best_context_predictor_model.pt"))
-
-        for key, cos_similarity_tensor in z_vect_similarity.items():
-            print(f"Mean cos_sim for class {key} is {cos_similarity_tensor.mean()} . Number: {cos_similarity_tensor.size()}")
-
-        z_vect_similarity = dict()
-
+predictive_encoder_training()
+#classification()
 
 # TODO Training scheduling - when it converges - try to add more negative samples, or try changing learning rate
 
