@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import os
 import datetime
 
-DEVICE = 'cuda'
+DEVICE = 'cpu'
 
 class ResnetEncoder(Module):
     def __init__(self):
@@ -91,6 +91,8 @@ class ResnetEncoder(Module):
 
         #print(f'shape after resnet {x.shape}')
         x = self.avg_pool.forward(x)
+        x = torch.squeeze(x, dim=3)
+        x = torch.squeeze(x, dim=2)
         ##print(f'shape after avg_pool {x.shape}')
 
         return x
@@ -168,7 +170,8 @@ class ContextPredictionModel(Module):
 
                 #print(f"context shape {context.shape}")
 
-                context = context.squeeze()
+                context = context.squeeze(dim=3)
+                context = context.squeeze(dim=2)
                 #print(f"context shape {context.shape}")
 
                 # UP - 0, RIGHT = 1, DOWN = 2, LEFT = 3
@@ -255,20 +258,65 @@ class ContextPredictionModel(Module):
         return prediction_list
 
 
-class ClassificationModel(Module):
+class ResClassificatorModel(Module):
 
-    def __init__(self):
-        super(ClassificationModel, self).__init__()
+    def __init__(self, in_channels, num_classes):
+        super(ResClassificatorModel, self).__init__()
 
-    def forward(self, encoder_outputs_grid):
-        cat = 1
-        return cat
+        # Input is [Bx1024x7x7] shaped
+        # Input is [Bxinput_channelsx7x7] shaped tensor
+
+        self.num_classes = num_classes
+        self.num_res_blocks = 11
+        self.in_channels = in_channels
+        self.channels = 2048
+
+        self.prep = nn.Sequential(
+            nn.Conv2d(
+                in_channels = in_channels,
+                out_channels = self.channels,
+                kernel_size = 3,
+                stride = 1,
+                padding = 1
+            ),
+            nn.BatchNorm2d(num_features=self.channels),
+            nn.ReLU()
+        )
+
+        self.res_blocks = nn.Sequential()
+        for i in range(self.num_res_blocks-1):
+            self.res_blocks.add_module(
+                f'res_block_{i}',
+                ResNetBottleneckBlock(
+                    in_channels_block = self.channels
+                )
+            )
+
+        self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
+        self.linear = nn.Linear(
+            in_features = self.channels,
+            out_features = self.num_classes
+        )
+
+        self.softmax = nn.Softmax(dim=1)
+
+
+    def forward(self, x):
+        x = self.prep(x)
+        x = self.res_blocks(x)
+        x = self.avg_pool(x)
+        x = x.squeeze(dim=3)
+        x = x.squeeze(dim=2)
+        x = self.linear(x)
+        x = self.softmax(x)
+
+        return x
 
 
 NUM_CLASSES = 100
-THE_BATCH_SIZE = 16
+THE_BATCH_SIZE = 2
 BATCH_SIZE = 2
-data_path = "/home/martin/ai/ImageNet-datasets-downloader/images_4/imagenet_images"
+data_path = "/Users/martinsf/data/images_1/imagenet_images"
 dataset_train, dataset_test = get_imagenet_datasets(data_path, num_classes = NUM_CLASSES)
 
 run_idx = 1
@@ -310,6 +358,34 @@ def get_random_patches():
 
     patches_tensor = torch.cat(patches, dim=0)
     return patches_tensor
+
+def get_patches_from_image_batch(img_batch):
+
+    patch_batch = None
+    all_patches_list = []
+
+    for y_patch in range(7):
+        for x_patch in range(7):
+
+            y1 = y_patch * 32
+            y2 = y1 + 64
+
+            x1 = x_patch * 32
+            x2 = x1 + 64
+
+            img_patches = img_batch[:,:,y1:y2,x1:x2] # Batch(img_idx in batch), channels xrange, yrange
+            img_patches = img_patches.unsqueeze(dim=1)
+            all_patches_list.append(img_patches)
+
+            # print(patch_batch.shape)
+    all_patches_tensor = torch.cat(all_patches_list, dim=1)
+
+    patches_per_image = []
+    for b in range(BATCH_SIZE):
+        patches_per_image.append(all_patches_tensor[b])
+
+    patch_batch = torch.cat(patches_per_image, dim = 0)
+    return patch_batch
 
 
 
@@ -362,8 +438,89 @@ def norm_euclidian(a,b):
 
     return (torch.sum(((a/aa-b/bb)**2),dim=1)**0.5)
 
+def classification():
 
-torch.autograd.set_detect_anomaly(True)
+    res_classification_model = ResClassificatorModel(in_channels=1024, num_classes=NUM_CLASSES)
+
+    data_path = "/Users/martinsf/data/images_1/imagenet_images"
+    dataset_train, dataset_test = get_imagenet_datasets(data_path, num_classes = NUM_CLASSES)
+
+    BATCH_SIZE = 2
+    THE_BATCH_SIZE = 16
+
+    data_loader_train = DataLoader(dataset_train, BATCH_SIZE, shuffle = True)
+    data_loader_test = DataLoader(dataset_test, BATCH_SIZE, shuffle = True)
+
+    NUM_TRAIN_SAMPLES = dataset_train.get_number_of_samples()
+    NUM_TEST_SAMPLES = dataset_test.get_number_of_samples()
+
+    CLASSIFICATION_EPOCHS = 10
+
+    for epoch in range(CLASSIFICATION_EPOCHS):
+
+        epoch_test_losses = []
+        epoch_train_true_positives = 0.0
+
+        for batch in data_loader_train:
+
+            img_batch = batch['image'].to(DEVICE)
+
+            patch_batch = get_patches_from_image_batch(img_batch)
+            patches_encoded = resnet_encoder.forward(patch_batch)
+
+            patches_encoded = patches_encoded.view(BATCH_SIZE, 7,7,-1)
+            patches_encoded = patches_encoded.permute(0,3,1,2)
+
+            classes = batch['cls'].to(DEVICE)
+
+            y_one_hot = torch.zeros(img_batch.shape[0], NUM_CLASSES).to(DEVICE)
+            y_one_hot = y_one_hot.scatter_(1, classes.unsqueeze(dim=1), 1)
+
+            labels = batch['class_name']
+
+            pred = res_classification_model.forward(patches_encoded)
+            loss = torch.sum(-y_one_hot * torch.log(pred))
+            epoch_test_losses.append(loss.detach().to('cpu').numpy())
+
+            epoch_train_true_positives += torch.sum(pred.argmax(dim=1) == classes)
+
+            loss.backward()
+
+        epoch_accuracy = float(epoch_train_true_positives) / float(NUM_TRAIN_SAMPLES)
+        print(f"Training epoch: {epoch} accuarcy: {epoch_accuracy}")
+
+
+        if batches_collected >= THE_BATCH_SIZE:
+
+            res_classification_model.eval()
+
+            optimizer.step()
+            optimizer.zero_grad()
+            batches_collected = 0
+
+            for batch in data_loader_test:
+
+                images = batch['image'].to(DEVICE)
+                classes = batch['cls'].to(DEVICE)
+
+                y_one_hot = torch.zeros(images.shape[0], NUM_CLASSES).to(DEVICE)
+                y_one_hot = y_one_hot.scatter_(1, classes.unsqueeze(dim=1), 1)
+
+                labels = batch['class_name']
+
+                pred = res_classification_model.forward(images)
+                loss = torch.sum(-y_one_hot * torch.log(pred))
+                epoch_test_losses.append(loss.detach().to('cpu').numpy())
+
+            epoch_accuracy = float(epoch_train_true_positives) / float(NUM_TEST_SAMPLES)
+
+            print(f"Testing epoch: {epoch} accuarcy: {epoch_accuracy}")
+
+            res_classification_model.train()
+
+
+classification()
+
 
 batches_processed = 0
 batch_loss = 0
@@ -373,44 +530,19 @@ z_vect_similarity = dict()
 
 for batch in data_loader_train:
 
-
     # plt.imshow(img_arr.permute(1,2,0))
     # fig, axes = plt.subplots(7,7)
 
-    patch_batch = None
-    all_patches_list = []
-
-    for y_patch in range(7):
-        for x_patch in range(7):
-
-            y1 = y_patch * 32
-            y2 = y1 + 64
-
-            x1 = x_patch * 32
-            x2 = x1 + 64
-
-            img_patches = batch['image'].to(DEVICE)[:,:,y1:y2,x1:x2] # Batch(img_idx in batch), channels xrange, yrange
-            img_patches = img_patches.unsqueeze(dim=1)
-            all_patches_list.append(img_patches)
-
-            # print(patch_batch.shape)
-    all_patches_tensor = torch.cat(all_patches_list, dim=1)
-
-    patches_per_image = []
-    for b in range(BATCH_SIZE):
-        patches_per_image.append(all_patches_tensor[b])
-
-    patch_batch = torch.cat(patches_per_image, dim = 0)
+    img_batch = batch['image'].to(DEVICE)
+    patch_batch = get_patches_from_image_batch(img_batch)
 
     patches_encoded = resnet_encoder.forward(patch_batch)
-    patches_encoded = patches_encoded.squeeze()
     patches_encoded = patches_encoded.view(BATCH_SIZE, 7,7,-1)
     patches_encoded = patches_encoded.permute(0,3,1,2)
 
     random_patches = get_random_patches().to(DEVICE)
     # enc_random_patches = resnet_encoder.forward(random_patches).detach()
     enc_random_patches = resnet_encoder.forward(random_patches)
-    enc_random_patches = enc_random_patches.squeeze()
 
     #print(f"shape after reshape{patches_encoded.shape}")
 
@@ -496,46 +628,12 @@ for batch in data_loader_train:
         z_vect_similarity = dict()
 
 
-
-#Training the encoder network with the prediction task
-
-#   For image in data
-
-#   TRAINING OF THE ENCODER/
-
-#   keep some pool for random patches
-
-#   prepare 7x7 image crops from the image
-#   run the encoder trough each of the images
-#   get 7x7 latent vectors for each of the image
-
-#   concat all in Dx7x7 tensor
-#   get context outputs from context model from context_model
-
-#   using context outputs make predictions of the other latent vectors
-
-#   get the negative samples from batch
-#
-#   calculate the losses
-#   do the backprop
-#   train
-
-
-#   when the training of the encoder is done -
-#   stack the predictor network on top of the encoders and do the prediction
-
-
-# TODO: Write custom PyTorch dataset that will prepare unlabeled dataset and labeled dataset for Semi-supervised settings
-# labeled, unlabeled, training = get_imgaenet_semi_supervised_learning_datasets()
-
-# TODO do we need to run backprop trough the random patches ???? Probably need to check in paper.
-# Also need to check how Torch runs the backprop
-
-# TODO Write classification model to put on top of the context model. 
-
 # TODO Training scheduling - when it converges - try to add more negative samples, or try changing learning rate
-# TODO Try to implement SGD ?
 
 # TODO: How to use batch norm correctly when collecting the gradients from smaller batches of two??
 
 # TODO: Data augmentation for patches, to remove simple cues for predicting following images - like straight lines and gradually changing colors.
+# TODO: Write custom PyTorch dataset that will prepare unlabeled dataset and labeled dataset for Semi-supervised settings
+# TODO: labeled, unlabeled, training = get_imgaenet_semi_supervised_learning_datasets()
+
+
