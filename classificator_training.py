@@ -2,16 +2,16 @@ import torch
 import itertools
 from torch.utils.data import DataLoader
 from imagenet_dataset import get_imagenet_datasets
-from helper_functions import get_patch_tensor_from_image_batch
+from helper_functions import get_patch_tensor_from_image_batch, inspect_model, write_csv_stats
 
 import os
 
-def run_classificator(res_classificator_model, res_encoder_model, models_store_path, num_classes, device):
+def run_classificator(args, res_classificator_model, res_encoder_model, models_store_path):
 
     print("RUNNING CLASSIFICATOR TRAINING")
+    dataset_train, dataset_test = get_imagenet_datasets(args.image_folder, num_classes = args.num_classes)
 
-    data_path = "/Users/martinsf/data/images_1/imagenet_images"
-    dataset_train, dataset_test = get_imagenet_datasets(data_path, num_classes = num_classes)
+    stats_csv_path = os.path.join(models_store_path, "classification_stats.csv")
 
     SUB_BATCH_SIZE = 2
     BATCH_SIZE = 2
@@ -31,19 +31,23 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
 
     for epoch in range(EPOCHS):
 
+
         sub_batches_processed = 0
 
         epoch_train_true_positives = 0.0
-        epoch_training_loss = 0.0
+        epoch_train_loss = 0.0
         epoch_train_losses = []
-        epoch_training_accuracy = 0.0
 
         batch_train_loss = 0.0
         batch_train_true_positives = 0.0
 
+        epoch_test_true_positives = 0.0
+        epoch_test_loss = 0.0
+        epoch_test_losses = []
+
         for batch in data_loader_train:
 
-            img_batch = batch['image'].to(device)
+            img_batch = batch['image'].to(args.device)
 
             patch_batch = get_patch_tensor_from_image_batch(img_batch)
             patches_encoded = res_encoder_model.forward(patch_batch)
@@ -51,9 +55,9 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
             patches_encoded = patches_encoded.view(img_batch.shape[0], 7,7,-1)
             patches_encoded = patches_encoded.permute(0,3,1,2)
 
-            classes = batch['cls'].to(device)
+            classes = batch['cls'].to(args.device)
 
-            y_one_hot = torch.zeros(img_batch.shape[0], num_classes).to(device)
+            y_one_hot = torch.zeros(img_batch.shape[0], args.num_classes).to(args.device)
             y_one_hot = y_one_hot.scatter_(1, classes.unsqueeze(dim=1), 1)
 
             labels = batch['class_name']
@@ -61,7 +65,7 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
             pred = res_classificator_model.forward(patches_encoded)
             loss = torch.sum(-y_one_hot * torch.log(pred))
             epoch_train_losses.append(loss.detach().to('cpu').numpy())
-            epoch_training_loss += loss.detach().to('cpu').numpy()
+            epoch_train_loss += loss.detach().to('cpu').numpy()
             batch_train_loss += loss.detach().to('cpu').numpy()
 
             epoch_train_true_positives += torch.sum(pred.argmax(dim=1) == classes)
@@ -85,26 +89,22 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
                 batch_train_loss = 0.0
                 batch_train_true_positives = 0.0
 
+                break
 
-        epoch_accuracy = float(epoch_train_true_positives) / float(NUM_TRAIN_SAMPLES)
-        print(f"Epoch {epoch} train accuarcy: {epoch_accuracy}")
 
-        print(f"Training loss of epoch {epoch} is {epoch_training_loss}")
-        print(f"Accuracy of epoch {epoch} is {epoch_training_accuracy}")
+        epoch_train_accuracy = float(epoch_train_true_positives) / float(NUM_TRAIN_SAMPLES)
+
+        print(f"Training loss of epoch {epoch} is {epoch_train_loss}")
+        print(f"Accuracy of epoch {epoch} is {epoch_train_accuracy}")
 
         with torch.no_grad():
 
             res_classificator_model.eval()
             res_encoder_model.eval()
 
-            epoch_test_true_positives = 0.0
-            epoch_test_loss = 0.0
-            epoch_test_losses = []
-
-
             for batch in data_loader_test:
 
-                img_batch = batch['image'].to(device)
+                img_batch = batch['image'].to(args.device)
 
                 patch_batch = get_patch_tensor_from_image_batch(img_batch)
                 patches_encoded = res_encoder_model.forward(patch_batch)
@@ -112,9 +112,9 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
                 patches_encoded = patches_encoded.view(img_batch.shape[0], 7,7,-1)
                 patches_encoded = patches_encoded.permute(0,3,1,2)
 
-                classes = batch['cls'].to(device)
+                classes = batch['cls'].to(args.device)
 
-                y_one_hot = torch.zeros(img_batch.shape[0], num_classes).to(device)
+                y_one_hot = torch.zeros(img_batch.shape[0], args.num_classes).to(args.device)
                 y_one_hot = y_one_hot.scatter_(1, classes.unsqueeze(dim=1), 1)
 
                 labels = batch['class_name']
@@ -122,9 +122,11 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
                 pred = res_classificator_model.forward(patches_encoded)
                 loss = torch.sum(-y_one_hot * torch.log(pred))
                 epoch_test_losses.append(loss.detach().to('cpu').numpy())
-                epoch_test_loss += loss.detach().to('cpu')
+                epoch_test_loss += loss.detach().to('cpu').numpy()
 
                 epoch_test_true_positives += torch.sum(pred.argmax(dim=1) == classes)
+
+                break
 
             epoch_test_accuracy = float(epoch_test_true_positives) / float(NUM_TEST_SAMPLES)
 
@@ -134,6 +136,7 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
         res_classificator_model.train()
         res_encoder_model.train()
 
+
         torch.save(res_encoder_model.state_dict(), os.path.join(models_store_path, "last_res_ecoder.pt"))
         torch.save(res_classificator_model.state_dict(), os.path.join(models_store_path, "last_res_classificator_model.pt"))
 
@@ -142,4 +145,16 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
             best_epoch_test_loss = epoch_test_loss
             torch.save(res_encoder_model.state_dict(), os.path.join(models_store_path, "best_res_ecoder.pt"))
             torch.save(res_classificator_model.state_dict(), os.path.join(models_store_path, "best_res_classificator_model.pt"))
+
+
+        stats = dict(
+            epoch = epoch,
+            train_acc = epoch_train_accuracy,
+            train_loss = epoch_train_loss,
+            test_acc = epoch_test_accuracy,
+            test_loss = epoch_test_loss
+        )
+
+        print(f"Writing dict {stats} into file {stats_csv_path}")
+        write_csv_stats(stats_csv_path, stats)
 

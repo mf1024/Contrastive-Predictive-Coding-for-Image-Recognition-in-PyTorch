@@ -1,6 +1,7 @@
 import torch
 import os
 import random
+import csv
 from torch.utils.data import DataLoader
 
 def cos_loss(a,b):
@@ -101,4 +102,20 @@ def get_patch_tensor_from_image_batch(img_batch):
 
     patch_batch = torch.cat(patches_per_image, dim = 0)
     return patch_batch
+
+
+def write_csv_stats(csv_path, stats_dict):
+
+    if not os.path.isfile(csv_path):
+        with open(csv_path, "w") as f:
+            csv_writer = csv.writer(f)
+            csv_writer.writerow(stats_dict.keys())
+
+    for key, value in stats_dict.items():
+        if isinstance(value, float):
+            stats_dict[key] = value % 0.001
+
+    with open(csv_path, "a") as f:
+        csv_writer = csv.writer(f)
+        csv_writer.writerow(stats_dict.values())
 

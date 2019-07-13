@@ -8,22 +8,17 @@ from torch.utils.data import DataLoader
 from imagenet_dataset import get_imagenet_datasets
 from helper_functions import cos_loss, norm_euclidian, get_random_patches, get_patch_tensor_from_image_batch
 
-def run_context_predictor(res_encoder_model, context_predictor_model, models_store_path, num_classes, device):
+def run_context_predictor(args, res_encoder_model, context_predictor_model, models_store_path):
 
     print("RUNNING CONTEXT PREDICTOR TRAINING")
 
-    THE_BATCH_SIZE = 2
-    SUB_BATCH_SIZE = 2
-    NUM_RANDOM_PATCHES = 15
-
-    data_path = "/Users/martinsf/data/images_1/imagenet_images"
-    dataset_train, dataset_test = get_imagenet_datasets(data_path, num_classes = num_classes)
+    dataset_train, dataset_test = get_imagenet_datasets(args.image_folder, num_classes = args.num_classes)
 
     def get_random_patch_loader():
-        return DataLoader(dataset_train, NUM_RANDOM_PATCHES, shuffle=True)
+        return DataLoader(dataset_train, args.num_random_patches, shuffle=True)
 
     random_patch_loader = get_random_patch_loader()
-    data_loader_train = DataLoader(dataset_train, SUB_BATCH_SIZE, shuffle = True)
+    data_loader_train = DataLoader(dataset_train, args.sub_batch_size, shuffle = True)
 
     params = list(res_encoder_model.parameters()) + list(context_predictor_model.parameters())
     optimizer = torch.optim.Adam(params = params, lr=0.0005)
@@ -39,7 +34,7 @@ def run_context_predictor(res_encoder_model, context_predictor_model, models_sto
         # plt.imshow(img_arr.permute(1,2,0))
         # fig, axes = plt.subplots(7,7)
 
-        img_batch = batch['image'].to(device)
+        img_batch = batch['image'].to(args.device)
         patch_batch = get_patch_tensor_from_image_batch(img_batch)
 
         patches_encoded = res_encoder_model.forward(patch_batch)
@@ -47,11 +42,11 @@ def run_context_predictor(res_encoder_model, context_predictor_model, models_sto
         patches_encoded = patches_encoded.permute(0,3,1,2)
 
         for i in range(2):
-            patches_return = get_random_patches(random_patch_loader, NUM_RANDOM_PATCHES)
+            patches_return = get_random_patches(random_patch_loader, args.num_random_patches)
             if patches_return['is_data_loader_finished']:
                 random_patch_loader = get_random_patch_loader()
             else:
-                random_patches = patches_return['patches_tensor'].to(device)
+                random_patches = patches_return['patches_tensor'].to(args.device)
 
         # enc_random_patches = resnet_encoder.forward(random_patches).detach()
         enc_random_patches = res_encoder_model.forward(random_patches)
@@ -83,9 +78,9 @@ def run_context_predictor(res_encoder_model, context_predictor_model, models_sto
             good_term = cos_loss(pred, target)
             divisor = cos_loss(pred, target)
 
-            store_similarity_idx = random.randint(0, NUM_RANDOM_PATCHES-1)
+            store_similarity_idx = random.randint(0, args.num_random_patches-1)
 
-            for random_patch_idx in range(NUM_RANDOM_PATCHES):
+            for random_patch_idx in range(args.num_random_patches):
                 divisor = divisor + cos_loss(pred, enc_random_patches[random_patch_idx:random_patch_idx+1])
 
                 if random_patch_idx == store_similarity_idx:
@@ -111,7 +106,7 @@ def run_context_predictor(res_encoder_model, context_predictor_model, models_sto
         sub_batches_processed += img_batch.shape[0]
         batch_loss += loss.detach().to('cpu')
 
-        if sub_batches_processed >= THE_BATCH_SIZE:
+        if sub_batches_processed >= args.batch_size:
 
             optimizer.step()
             optimizer.zero_grad()
