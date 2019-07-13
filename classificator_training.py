@@ -91,41 +91,44 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
         print(f"Training loss of epoch {epoch} is {epoch_training_loss}")
         print(f"Accuracy of epoch {epoch} is {epoch_training_accuracy}")
 
-        res_classificator_model.eval()
-        res_encoder_model.eval()
+        with torch.no_grad():
 
-        epoch_test_true_positives = 0.0
-        epoch_test_loss = 0.0
-        epoch_test_losses = []
+            res_classificator_model.eval()
+            res_encoder_model.eval()
 
-        for batch in data_loader_test:
+            epoch_test_true_positives = 0.0
+            epoch_test_loss = 0.0
+            epoch_test_losses = []
 
-            img_batch = batch['image'].to(device)
 
-            patch_batch = get_patch_tensor_from_image_batch(img_batch)
-            patches_encoded = res_encoder_model.forward(patch_batch)
+            for batch in data_loader_test:
 
-            patches_encoded = patches_encoded.view(img_batch.shape[0], 7,7,-1)
-            patches_encoded = patches_encoded.permute(0,3,1,2)
+                img_batch = batch['image'].to(device)
 
-            classes = batch['cls'].to(device)
+                patch_batch = get_patch_tensor_from_image_batch(img_batch)
+                patches_encoded = res_encoder_model.forward(patch_batch)
 
-            y_one_hot = torch.zeros(img_batch.shape[0], num_classes).to(device)
-            y_one_hot = y_one_hot.scatter_(1, classes.unsqueeze(dim=1), 1)
+                patches_encoded = patches_encoded.view(img_batch.shape[0], 7,7,-1)
+                patches_encoded = patches_encoded.permute(0,3,1,2)
 
-            labels = batch['class_name']
+                classes = batch['cls'].to(device)
 
-            pred = res_classificator_model.forward(patches_encoded)
-            loss = torch.sum(-y_one_hot * torch.log(pred))
-            epoch_test_losses.append(loss.detach().to('cpu').numpy())
-            epoch_test_loss += loss.detach().to('cpu')
+                y_one_hot = torch.zeros(img_batch.shape[0], num_classes).to(device)
+                y_one_hot = y_one_hot.scatter_(1, classes.unsqueeze(dim=1), 1)
 
-            epoch_test_true_positives += torch.sum(pred.argmax(dim=1) == classes)
+                labels = batch['class_name']
 
-        epoch_test_accuracy = float(epoch_test_true_positives) / float(NUM_TEST_SAMPLES)
+                pred = res_classificator_model.forward(patches_encoded)
+                loss = torch.sum(-y_one_hot * torch.log(pred))
+                epoch_test_losses.append(loss.detach().to('cpu').numpy())
+                epoch_test_loss += loss.detach().to('cpu')
 
-        print(f"Test loss of epoch {epoch} is {epoch_test_loss}")
-        print(f"Test accuracy of epoch {epoch} is {epoch_test_accuracy}")
+                epoch_test_true_positives += torch.sum(pred.argmax(dim=1) == classes)
+
+            epoch_test_accuracy = float(epoch_test_true_positives) / float(NUM_TEST_SAMPLES)
+
+            print(f"Test loss of epoch {epoch} is {epoch_test_loss}")
+            print(f"Test accuracy of epoch {epoch} is {epoch_test_accuracy}")
 
         res_classificator_model.train()
         res_encoder_model.train()
