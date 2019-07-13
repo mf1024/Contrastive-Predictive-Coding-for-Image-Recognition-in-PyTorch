@@ -13,13 +13,11 @@ def run_classificator(args, res_classificator_model, res_encoder_model, models_s
 
     stats_csv_path = os.path.join(models_store_path, "classification_stats.csv")
 
-    SUB_BATCH_SIZE = 2
-    BATCH_SIZE = 2
     EPOCHS = 10
     LABELS_PER_CLASS = 25
 
-    data_loader_train = DataLoader(dataset_train, SUB_BATCH_SIZE, shuffle = True)
-    data_loader_test = DataLoader(dataset_test, SUB_BATCH_SIZE, shuffle = True)
+    data_loader_train = DataLoader(dataset_train, args.sub_batch_size, shuffle = True)
+    data_loader_test = DataLoader(dataset_test, args.sub_batch_size, shuffle = True)
 
     NUM_TRAIN_SAMPLES = dataset_train.get_number_of_samples()
     NUM_TEST_SAMPLES = dataset_test.get_number_of_samples()
@@ -76,12 +74,12 @@ def run_classificator(args, res_classificator_model, res_encoder_model, models_s
             sub_batches_processed += img_batch.shape[0]
 
 
-            if sub_batches_processed >= BATCH_SIZE:
+            if sub_batches_processed >= args.batch_size:
                 optimizer.step()
                 optimizer.zero_grad()
                 sub_batches_processed = 0
 
-                batch_train_accuracy = float(batch_train_true_positives) / float(BATCH_SIZE)
+                batch_train_accuracy = float(batch_train_true_positives) / float(args.batch_size)
 
                 print(f"Training loss of batch is {batch_train_loss}")
                 print(f"Accuracy of batch is {batch_train_accuracy}")
