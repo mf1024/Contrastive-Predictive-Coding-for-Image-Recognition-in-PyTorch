@@ -65,6 +65,7 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
             batch_train_loss += loss.detach().to('cpu').numpy()
 
             epoch_train_true_positives += torch.sum(pred.argmax(dim=1) == classes)
+            batch_train_true_positives += torch.sum(pred.argmax(dim=1) == classes)
 
             loss.backward()
 
