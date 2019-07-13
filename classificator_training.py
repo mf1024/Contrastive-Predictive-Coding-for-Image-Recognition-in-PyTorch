@@ -89,8 +89,6 @@ def run_classificator(args, res_classificator_model, res_encoder_model, models_s
                 batch_train_loss = 0.0
                 batch_train_true_positives = 0.0
 
-                break
-
 
         epoch_train_accuracy = float(epoch_train_true_positives) / float(NUM_TRAIN_SAMPLES)
 
@@ -125,8 +123,6 @@ def run_classificator(args, res_classificator_model, res_encoder_model, models_s
                 epoch_test_loss += loss.detach().to('cpu').numpy()
 
                 epoch_test_true_positives += torch.sum(pred.argmax(dim=1) == classes)
-
-                break
 
             epoch_test_accuracy = float(epoch_test_true_positives) / float(NUM_TEST_SAMPLES)
 
