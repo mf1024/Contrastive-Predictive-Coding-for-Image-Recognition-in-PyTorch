@@ -42,10 +42,10 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
 
             img_batch = batch['image'].to(device)
 
-            patch_batch = get_patch_tensor_from_image_batch(img_batch, SUB_BATCH_SIZE)
+            patch_batch = get_patch_tensor_from_image_batch(img_batch)
             patches_encoded = res_encoder_model.forward(patch_batch)
 
-            patches_encoded = patches_encoded.view(SUB_BATCH_SIZE, 7,7,-1)
+            patches_encoded = patches_encoded.view(img_batch.shape[0], 7,7,-1)
             patches_encoded = patches_encoded.permute(0,3,1,2)
 
             classes = batch['cls'].to(device)
@@ -66,7 +66,7 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
 
             loss.backward()
 
-            sub_batches_processed += SUB_BATCH_SIZE
+            sub_batches_processed += img_batch.shape[0]
 
 
             if sub_batches_processed >= BATCH_SIZE:
@@ -91,10 +91,10 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
 
             img_batch = batch['image'].to(device)
 
-            patch_batch = get_patch_tensor_from_image_batch(img_batch, SUB_BATCH_SIZE)
+            patch_batch = get_patch_tensor_from_image_batch(img_batch)
             patches_encoded = res_encoder_model.forward(patch_batch)
 
-            patches_encoded = patches_encoded.view(SUB_BATCH_SIZE, 7,7,-1)
+            patches_encoded = patches_encoded.view(img_batch.shape[0], 7,7,-1)
             patches_encoded = patches_encoded.permute(0,3,1,2)
 
             classes = batch['cls'].to(device)

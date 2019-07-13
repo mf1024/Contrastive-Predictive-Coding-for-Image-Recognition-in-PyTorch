@@ -39,10 +39,10 @@ def run_context_predictor(res_encoder_model, context_predictor_model, models_sto
         # fig, axes = plt.subplots(7,7)
 
         img_batch = batch['image'].to(device)
-        patch_batch = get_patch_tensor_from_image_batch(img_batch, SUB_BATCH_SIZE)
+        patch_batch = get_patch_tensor_from_image_batch(img_batch)
 
         patches_encoded = res_encoder_model.forward(patch_batch)
-        patches_encoded = patches_encoded.view(SUB_BATCH_SIZE, 7,7,-1)
+        patches_encoded = patches_encoded.view(img_batch.shape[0], 7,7,-1)
         patches_encoded = patches_encoded.permute(0,3,1,2)
 
         for i in range(2):
@@ -107,7 +107,7 @@ def run_context_predictor(res_encoder_model, context_predictor_model, models_sto
         loss = torch.sum(torch.cat(losses))
         loss.backward()
 
-        sub_batches_processed += SUB_BATCH_SIZE
+        sub_batches_processed += img_batch.shape[0]
         batch_loss += loss.detach().to('cpu')
 
         if sub_batches_processed >= THE_BATCH_SIZE:
