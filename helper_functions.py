@@ -71,7 +71,7 @@ def get_random_patches(random_patch_loader, num_random_patches):
             is_data_loader_finished = is_data_loader_finished)
 
 
-def get_patch_tensor_from_image_batch(img_batch, batch_size):
+def get_patch_tensor_from_image_batch(img_batch):
 
     # Input of the function is a tensor [B, C, H, W]
     # Output of the functions is a tensor [B * 49, C, 64, 64]
@@ -96,7 +96,7 @@ def get_patch_tensor_from_image_batch(img_batch, batch_size):
     all_patches_tensor = torch.cat(all_patches_list, dim=1)
 
     patches_per_image = []
-    for b in range(batch_size):
+    for b in range(all_patches_tensor.shape[0]):
         patches_per_image.append(all_patches_tensor[b])
 
     patch_batch = torch.cat(patches_per_image, dim = 0)
