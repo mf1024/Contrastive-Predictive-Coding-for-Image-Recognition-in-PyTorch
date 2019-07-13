@@ -113,7 +113,8 @@ def write_csv_stats(csv_path, stats_dict):
 
     for key, value in stats_dict.items():
         if isinstance(value, float):
-            stats_dict[key] = value % 0.001
+            precision = 0.001
+            stats_dict[key] =  ((value * precision ) // 1.0 ) / precision
 
     with open(csv_path, "a") as f:
         csv_writer = csv.writer(f)
