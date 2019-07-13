@@ -25,7 +25,8 @@ def run_context_predictor(res_encoder_model, context_predictor_model, models_sto
     random_patch_loader = get_random_patch_loader()
     data_loader_train = DataLoader(dataset_train, SUB_BATCH_SIZE, shuffle = True)
 
-    optimizer = torch.optim.Adam(params = itertools.chain(res_encoder_model.parameters(), context_predictor_model.parameters()), lr=0.0005)
+    params = list(res_encoder_model.parameters()) + list(context_predictor_model.parameters())
+    optimizer = torch.optim.Adam(params = params, lr=0.0005)
 
     sub_batches_processed = 0
     batch_loss = 0

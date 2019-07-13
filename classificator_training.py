@@ -24,8 +24,8 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
     NUM_TRAIN_SAMPLES = dataset_train.get_number_of_samples()
     NUM_TEST_SAMPLES = dataset_test.get_number_of_samples()
 
-
-    optimizer = torch.optim.Adam(params = itertools.chain(res_classificator_model.parameters(), res_encoder_model.parameters()), lr=0.0005)
+    params = list(res_classificator_model.parameters()) + list(res_encoder_model.parameters())
+    optimizer = torch.optim.Adam(params = params, lr=0.0005)
 
     best_epoch_test_loss = 0.0
 
@@ -37,6 +37,9 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
         epoch_training_loss = 0.0
         epoch_train_losses = []
         epoch_training_accuracy = 0.0
+
+        batch_train_loss = 0.0
+        batch_train_true_positives = 0.0
 
         for batch in data_loader_train:
 
@@ -59,9 +62,8 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
             loss = torch.sum(-y_one_hot * torch.log(pred))
             epoch_train_losses.append(loss.detach().to('cpu').numpy())
             epoch_training_loss += loss.detach().to('cpu').numpy()
+            batch_train_loss += loss.detach().to('cpu').numpy()
 
-            print(pred.argmax(dim=1))
-            print(classes)
             epoch_train_true_positives += torch.sum(pred.argmax(dim=1) == classes)
 
             loss.backward()
@@ -70,10 +72,17 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
 
 
             if sub_batches_processed >= BATCH_SIZE:
-                res_classificator_model.eval()
                 optimizer.step()
                 optimizer.zero_grad()
                 sub_batches_processed = 0
+
+                batch_train_accuracy = float(batch_train_true_positives) / float(BATCH_SIZE)
+
+                print(f"Training loss of batch is {batch_train_loss}")
+                print(f"Accuracy of batch is {batch_train_accuracy}")
+
+                batch_train_loss = 0.0
+                batch_train_true_positives = 0.0
 
 
         epoch_accuracy = float(epoch_train_true_positives) / float(NUM_TRAIN_SAMPLES)
@@ -82,6 +91,8 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
         print(f"Training loss of epoch {epoch} is {epoch_training_loss}")
         print(f"Accuracy of epoch {epoch} is {epoch_training_accuracy}")
 
+        res_classificator_model.eval()
+        res_encoder_model.eval()
 
         epoch_test_true_positives = 0.0
         epoch_test_loss = 0.0
@@ -104,13 +115,12 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
 
             labels = batch['class_name']
 
-            pred = res_classificator_model.forward(img_batch)
+            pred = res_classificator_model.forward(patches_encoded)
             loss = torch.sum(-y_one_hot * torch.log(pred))
             epoch_test_losses.append(loss.detach().to('cpu').numpy())
             epoch_test_loss += loss.detach().to('cpu')
 
             epoch_test_true_positives += torch.sum(pred.argmax(dim=1) == classes)
-            print(f"Testing epoch: {epoch} accuarcy: {epoch_accuracy}")
 
         epoch_test_accuracy = float(epoch_test_true_positives) / float(NUM_TEST_SAMPLES)
 
@@ -118,6 +128,7 @@ def run_classificator(res_classificator_model, res_encoder_model, models_store_p
         print(f"Test accuracy of epoch {epoch} is {epoch_test_accuracy}")
 
         res_classificator_model.train()
+        res_encoder_model.train()
 
         torch.save(res_encoder_model.state_dict(), os.path.join(models_store_path, "last_res_ecoder.pt"))
         torch.save(res_classificator_model.state_dict(), os.path.join(models_store_path, "last_res_classificator_model.pt"))
