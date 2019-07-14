@@ -76,7 +76,7 @@ if args.mode == 'train_classificator':
         res_encoder_model.load_state_dict(torch.load(res_encoder_weights_path))
 
     if res_classificator_weights_path:
-        context_predictor_model.load_state_dict(torch.load(res_classificator_weights_path))
+        res_classificator_model.context_predictor_model.load_state_dict(torch.load(res_classificator_weights_path))
 
     run_classificator(args, res_classificator_model, res_encoder_model, model_store_folder)
 

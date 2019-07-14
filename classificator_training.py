@@ -25,10 +25,9 @@ def run_classificator(args, res_classificator_model, res_encoder_model, models_s
     params = list(res_classificator_model.parameters()) + list(res_encoder_model.parameters())
     optimizer = torch.optim.Adam(params = params, lr=0.0005)
 
-    best_epoch_test_loss = 0.0
+    best_epoch_test_loss = 1e10
 
     for epoch in range(EPOCHS):
-
 
         sub_batches_processed = 0
 
@@ -41,6 +40,7 @@ def run_classificator(args, res_classificator_model, res_encoder_model, models_s
 
         epoch_test_true_positives = 0.0
         epoch_test_loss = 0.0
+
         epoch_test_losses = []
 
         for batch in data_loader_train:
@@ -131,14 +131,14 @@ def run_classificator(args, res_classificator_model, res_encoder_model, models_s
         res_encoder_model.train()
 
 
-        torch.save(res_encoder_model.state_dict(), os.path.join(models_store_path, "last_res_ecoder.pt"))
-        torch.save(res_classificator_model.state_dict(), os.path.join(models_store_path, "last_res_classificator_model.pt"))
+        torch.save(res_encoder_model.state_dict(), os.path.join(models_store_path, "last_res_ecoder_weights.pt"))
+        torch.save(res_classificator_model.state_dict(), os.path.join(models_store_path, "last_res_classificator_weights.pt"))
 
         if best_epoch_test_loss > epoch_test_loss:
 
             best_epoch_test_loss = epoch_test_loss
-            torch.save(res_encoder_model.state_dict(), os.path.join(models_store_path, "best_res_ecoder.pt"))
-            torch.save(res_classificator_model.state_dict(), os.path.join(models_store_path, "best_res_classificator_model.pt"))
+            torch.save(res_encoder_model.state_dict(), os.path.join(models_store_path, "best_res_ecoder_weights.pt"))
+            torch.save(res_classificator_model.state_dict(), os.path.join(models_store_path, "best_res_classificator_weights.pt"))
 
 
         stats = dict(

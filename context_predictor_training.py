@@ -25,7 +25,7 @@ def run_context_predictor(args, res_encoder_model, context_predictor_model, mode
 
     sub_batches_processed = 0
     batch_loss = 0
-    best_batch_loss = 10000000000
+    best_batch_loss = 1e10
 
     z_vect_similarity = dict()
 
@@ -112,13 +112,13 @@ def run_context_predictor(args, res_encoder_model, context_predictor_model, mode
             optimizer.zero_grad()
             print(f"{datetime.datetime.now()} Loss: {batch_loss}")
 
-            torch.save(res_encoder_model.state_dict(), os.path.join(models_store_path, "last_resnet_ecoder.pt"))
-            torch.save(context_predictor_model.state_dict(), os.path.join(models_store_path, "last_context_predictor_model.pt"))
+            torch.save(res_encoder_model.state_dict(), os.path.join(models_store_path, "last_res_ecoder_weights.pt"))
+            torch.save(context_predictor_model.state_dict(), os.path.join(models_store_path, "last_context_predictor_weights.pt"))
 
             if best_batch_loss > batch_loss:
                 best_batch_loss = batch_loss
-                torch.save(res_encoder_model.state_dict(), os.path.join(models_store_path, "best_resnet_ecoder.pt"))
-                torch.save(context_predictor_model.state_dict(), os.path.join(models_store_path, "best_context_predictor_model.pt"))
+                torch.save(res_encoder_model.state_dict(), os.path.join(models_store_path, "best_res_ecoder_weights.pt"))
+                torch.save(context_predictor_model.state_dict(), os.path.join(models_store_path, "best_context_predictor_weights.pt"))
 
             for key, cos_similarity_tensor in z_vect_similarity.items():
                 print(f"Mean cos_sim for class {key} is {cos_similarity_tensor.mean()} . Number: {cos_similarity_tensor.size()}")
