@@ -80,8 +80,3 @@ if args.mode == 'train_classificator':
 
     run_classificator(args, res_classificator_model, res_encoder_model, model_store_folder)
 
-# TODO Training scheduling - when it converges - try to add more negative samples, or try changing learning rate
-# TODO: How to use batch norm correctly when collecting the gradients from smaller batches of two??
-# TODO: Data augmentation for patches, to remove simple cues for predicting following images - like straight lines and gradually changing colors.
-# TODO: Write custom PyTorch dataset that will prepare unlabeled dataset and labeled dataset for Semi-supervised settings
-# TODO: labeled, unlabeled, training = get_imgaenet_semi_supervised_learning_datasets()
