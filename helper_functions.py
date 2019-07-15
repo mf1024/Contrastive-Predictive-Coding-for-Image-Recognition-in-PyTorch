@@ -4,13 +4,20 @@ import random
 import csv
 from torch.utils.data import DataLoader
 
-def cos_loss(a,b):
+def dot_norm_exp(a,b):
     dot = torch.sum(a * b, dim=1)
     aa = torch.sum((a**2),dim=1)**0.5
     bb = torch.sum((b**2),dim=1)**0.5
     dot_norm = dot/(aa*bb)
     ret = torch.exp(dot_norm)
     return ret
+
+def dot_norm(a,b):
+    dot = torch.sum(a * b, dim=1)
+    aa = torch.sum((a**2),dim=1)**0.5
+    bb = torch.sum((b**2),dim=1)**0.5
+    dot_norm = dot/(aa*bb)
+    return dot_norm
 
 def norm_euclidian(a,b):
     aa = (torch.sum((a**2),dim=1)**0.5).unsqueeze(dim=1)

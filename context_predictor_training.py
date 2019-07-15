@@ -6,7 +6,7 @@ import os
 
 from torch.utils.data import DataLoader
 from imagenet_dataset import get_imagenet_datasets
-from helper_functions import cos_loss, norm_euclidian, get_random_patches, get_patch_tensor_from_image_batch
+from helper_functions import dot_norm, dot_norm_exp, norm_euclidian, get_random_patches, get_patch_tensor_from_image_batch
 
 def run_context_predictor(args, res_encoder_model, context_predictor_model, models_store_path):
 
@@ -53,6 +53,7 @@ def run_context_predictor(args, res_encoder_model, context_predictor_model, mode
 
         predictions = context_predictor_model.forward(patches_encoded)
         losses = []
+        # losses2 = []
 
         for p in predictions:
 
@@ -63,45 +64,57 @@ def run_context_predictor(args, res_encoder_model, context_predictor_model, mode
             # print(f"pred.shape {pred.shape}")
             # print(f"target.shape {target.shape}")
 
-            cos_loss_val = cos_loss(pred.detach().to('cpu'), target.detach().to('cpu'))
+            dot_norm_exp_val = dot_norm_exp(pred.detach().to('cpu'), target.detach().to('cpu'))
             euc_loss_val = norm_euclidian(pred.detach().to('cpu'), target.detach().to('cpu'))
 
             if pred_class in z_vect_similarity:
-                z_vect_similarity[pred_class] = torch.cat([z_vect_similarity[pred_class], cos_loss_val], dim = 0)
-                # print(f"gut cos_sim {cos_loss_val}")
+                z_vect_similarity[pred_class] = torch.cat([z_vect_similarity[pred_class], dot_norm_exp_val], dim = 0)
+                # print(f"gut cos_sim {dot_norm_exp_val}")
                 # print(f"gut mse: {euc_loss_val}")
             else:
-                z_vect_similarity[pred_class] = cos_loss_val
+                z_vect_similarity[pred_class] = dot_norm_exp_val
 
             #print(f"target shape {target.shape} pred shape {pred.shape}")
 
-            good_term = cos_loss(pred, target)
-            divisor = cos_loss(pred, target)
+
+            # good_term = dot_norm_exp(pred, target)
+            # divisor = dot_norm_exp(pred, target)
+
+            good_term_dot = dot_norm(pred, target)
+            dot_terms = [torch.unsqueeze(good_term_dot,dim=0)]
 
             store_similarity_idx = random.randint(0, args.num_random_patches-1)
 
             for random_patch_idx in range(args.num_random_patches):
-                divisor = divisor + cos_loss(pred, enc_random_patches[random_patch_idx:random_patch_idx+1])
+
+                # divisor = divisor + dot_norm_exp(pred, enc_random_patches[random_patch_idx:random_patch_idx+1])
+                bad_term_dot = dot_norm(pred, enc_random_patches[random_patch_idx:random_patch_idx+1])
+                dot_terms.append(torch.unsqueeze(bad_term_dot, dim=0))
 
                 if random_patch_idx == store_similarity_idx:
 
                     pred_class = pred_class+"b"
 
-                    cos_loss_val = cos_loss(pred.detach().detach().to('cpu'), enc_random_patches[random_patch_idx:random_patch_idx+1].detach().to('cpu'))
+                    dot_norm_exp_val = dot_norm_exp(pred.detach().detach().to('cpu'), enc_random_patches[random_patch_idx:random_patch_idx+1].detach().to('cpu'))
                     euc_loss_val = norm_euclidian(pred.detach().detach().to('cpu'), enc_random_patches[random_patch_idx:random_patch_idx+1].detach().to('cpu'))
 
                     if pred_class in z_vect_similarity:
-                        z_vect_similarity[pred_class] = torch.cat([z_vect_similarity[pred_class], cos_loss_val], dim = 0)
-                        # print(f"bad cos_sim {cos_loss_val}")
+                        z_vect_similarity[pred_class] = torch.cat([z_vect_similarity[pred_class], dot_norm_exp_val], dim = 0)
+                        # print(f"bad cos_sim {dot_norm_exp_val}")
                         # print(f"bad mse: {euc_loss_val}")
                     else:
-                        z_vect_similarity[pred_class] = cos_loss_val
+                        z_vect_similarity[pred_class] = dot_norm_exp_val
 
+            log_softmax = torch.log_softmax(torch.cat(dot_terms, dim=0), dim=0)
+            losses.append(-log_softmax[0,])
 
-            losses.append(-torch.log(good_term/divisor))
+            # losses.append(-torch.log(good_term/divisor))
 
-        loss = torch.sum(torch.cat(losses))
+        loss = torch.mean(torch.cat(losses))
         loss.backward()
+
+        # loss = torch.sum(torch.cat(losses))
+        # loss.backward()
 
         sub_batches_processed += img_batch.shape[0]
         batch_loss += loss.detach().to('cpu')
