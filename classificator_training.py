@@ -9,11 +9,11 @@ import os
 def run_classificator(args, res_classificator_model, res_encoder_model, models_store_path):
 
     print("RUNNING CLASSIFICATOR TRAINING")
-    dataset_train, dataset_test = get_imagenet_datasets(args.image_folder, num_classes = args.num_classes)
+    dataset_train, dataset_test = get_imagenet_datasets(args.image_folder, num_classes = args.num_classes, train_split = 0.2, random_seed = 42)
 
     stats_csv_path = os.path.join(models_store_path, "classification_stats.csv")
 
-    EPOCHS = 10
+    EPOCHS = 100
     LABELS_PER_CLASS = 25
 
     data_loader_train = DataLoader(dataset_train, args.sub_batch_size, shuffle = True)

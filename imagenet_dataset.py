@@ -111,12 +111,13 @@ class ImageNetDataset(Dataset):
         return self.classes[class_idx]['class_name']
 
 
-def get_imagenet_datasets(data_path, num_classes = None):
+def get_imagenet_datasets(data_path, train_split = 0.9, num_classes = None, random_seed = None):
 
-    random_seed = int(time.time())
+    if random_seed == None:
+        random_seed = int(time.time())
 
-    dataset_train = ImageNetDataset(data_path,is_train = True, random_seed=random_seed, num_classes = num_classes)
-    dataset_test = ImageNetDataset(data_path, is_train = False, random_seed=random_seed, num_classes = num_classes)
+    dataset_train = ImageNetDataset(data_path,is_train = True, random_seed=random_seed, num_classes = num_classes, train_split=train_split)
+    dataset_test = ImageNetDataset(data_path, is_train = False, random_seed=random_seed, num_classes = num_classes, train_split=train_split)
 
     return dataset_train, dataset_test
 
