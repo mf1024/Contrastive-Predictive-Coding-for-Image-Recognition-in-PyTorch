@@ -17,8 +17,11 @@ def dot_norm(a,b):
     aa = torch.sum((a**2),dim=1)**0.5
     bb = torch.sum((b**2),dim=1)**0.5
     dot_norm = dot/(aa*bb)
-    return dot # not norm dot :)
-    # return dot_norm
+    return dot_norm
+
+def dot(a,b):
+    dot = torch.sum(a * b, dim=1)
+    return dot
 
 def norm_euclidian(a,b):
     aa = (torch.sum((a**2),dim=1)**0.5).unsqueeze(dim=1)

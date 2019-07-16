@@ -125,11 +125,11 @@ class ContextPredictionModel(Module):
         )
 
 
-        # UP - 0, RIGHT = 1, DOWN = 2, LEFT = 3
+        # Y direction predictions, X direction predictions
 
         self.prediction_weights = nn.ModuleList([nn.ModuleList() for i in range(4)])
 
-        for direction in range(4):
+        for direction in range(2):
             for prediction_steps in range(3):
                 self.prediction_weights[direction].append(
                     nn.Linear(
@@ -141,107 +141,69 @@ class ContextPredictionModel(Module):
 
     def forward(self, x):
 
-        prediction_list = []
+        z_patches_list = []
+        z_patches_loc_list = []
 
         for y1 in range(5):
             for x1 in range(5):
                 y2 = y1 + 2
                 x2 = x1 + 2
 
-                context_input = x[:,:,y1:y2+1,x1:x2+1]
-                #print(f"x1:{x1} y1:{y1}, x2:{x2}, y2:{y2}")
+                z_patches = x[:,:,y1:y2+1,x1:x2+1]
+                z_patches_loc = (y1+1,x1+1) # Store middle of the 3x3 square
 
-                #print(f"context_input shape {context_input.shape}")
-                context = self.context_conv.forward(context_input)
+                z_patches_list.append(z_patches)
+                z_patches_loc_list += [z_patches_loc] * len(z_patches)
 
-                #print(f"context shape {context.shape}")
+        z_patches_tensor = torch.cat(z_patches_list, dim = 0)
 
-                context = context.squeeze(dim=3)
-                context = context.squeeze(dim=2)
-                #print(f"context shape {context.shape}")
+        context_vectors = self.context_conv.forward(z_patches_tensor)
 
-                # UP - 0, RIGHT = 1, DOWN = 2, LEFT = 3
+        context_vectors = context_vectors.squeeze(dim=3)
+        context_vectors = context_vectors.squeeze(dim=2)
 
-                #predict down
+        context_vectors_for_yp = []
+        context_loc_for_yp = []
 
-                if y2 == 2 or y2 == 3:
-                    for steps_y_plus in range(3):
-                        y3 = y2 + (steps_y_plus+1)
-                        if y3 > 6:
-                            break
+        context_vectors_for_xp = []
+        context_loc_for_xp = []
 
-                        # print(f"y+ pred for y1:{y1} y2:{y2} x1:{x1} x2:{x2} y3:{y3}")
+        for v_idx in range(len(context_vectors)):
+            y3 = z_patches_loc_list[v_idx][0]
+            x3 = z_patches_loc_list[v_idx][1]
 
-                        prediction = self.prediction_weights[0][steps_y_plus].forward(context)
-                        #print(f"predfiction shape on context {prediction.shape}")
-                        prediction_list.append(
-                            dict(
-                                y=y3,
-                                x=x1+1,
-                                prediction=prediction,
-                                pred_class=f"y+{steps_y_plus+1}",
-                            )
-                        )
+            if y3 == 1 or y3 == 2:
+                context_vectors_for_yp.append(context_vectors[v_idx:v_idx+1])
+                context_loc_for_yp.append(z_patches_loc_list[v_idx])
 
+            if x3 == 1 or x3 == 2:
+                context_vectors_for_xp.append(context_vectors[v_idx:v_idx+1])
+                context_loc_for_xp.append(z_patches_loc_list[v_idx])
 
-                if y1 == 3 or y1 == 4:
-                    for steps_y_minus in range(3):
-                        y3 = y1 - (steps_y_minus+1)
-                        if y3 < 0:
-                            break
+        context_vect_tensor_for_yp = torch.cat(context_vectors_for_yp, dim=0)
+        context_loc_for_yp_t = torch.tensor(context_loc_for_yp)
 
-                        # print(f"y- pred for y1:{y1} y2:{y2} x1:{x1} x2:{x2} y3:{y3}")
+        context_vect_tensor_for_xp = torch.cat(context_vectors_for_yp, dim=0)
+        context_loc_for_xp_t = torch.tensor(context_loc_for_xp)
 
-                        prediction = self.prediction_weights[1][steps_y_minus].forward(context)
-                        #print(f"predfiction shape on context {prediction.shape}")
-                        prediction_list.append(
-                            dict(
-                                y=y3,
-                                x=x1+1,
-                                prediction=prediction,
-                                pred_class=f"y-{steps_y_minus+1}",
-                            )
-                        )
+        all_predictions = []
+        all_loc = []
 
+        for steps_y in range(3):
+            predictions = self.prediction_weights[0][steps_y].forward(context_vect_tensor_for_yp)
+            all_predictions.append(predictions)
+            steps_add = torch.tensor([steps_y + 2,0])
+            all_loc.append(context_loc_for_yp_t + steps_add)
 
-                if x2 == 2 or x2 == 3:
-                    for steps_x_plus in range(3):
-                        x3 = x2 + (steps_x_plus+1)
-                        if x3 > 6:
-                            break
+        for steps_x in range(3):
+            predictions = self.prediction_weights[1][steps_x].forward(context_vect_tensor_for_xp)
+            all_predictions.append(predictions)
+            steps_add = torch.tensor([0, steps_x + 2])
+            all_loc.append(context_loc_for_xp_t + steps_add)
 
-                        # print(f"x+ pred for y1:{y1} y2:{y2} x1:{x1} x2:{x2} x3:{x3}")
-                        prediction = self.prediction_weights[2][steps_x_plus].forward(context)
-                        #print(f"predfiction shape on context {prediction.shape}")
-                        prediction_list.append(
-                            dict(
-                                y=y1+1,
-                                x=x3,
-                                prediction=prediction,
-                                pred_class=f"x+{steps_x_plus+1}",
-                            )
-                        )
+        ret = torch.cat(all_predictions, dim = 0), torch.cat(all_loc, dim = 0)
 
-
-                if x1 == 3 or x1 == 4:
-                    for steps_x_minus in range(3):
-                        x3 = x1 - (steps_x_minus+1)
-                        if x3 < 0:
-                            break
-
-                        # print(f"x- pred for y1:{y1} y2:{y2} x1:{x1} x2{x2} x3:{x3}")
-                        prediction = self.prediction_weights[3][steps_x_minus].forward(context)
-                        #print(f"predfiction shape on context {prediction.shape}")
-                        prediction_list.append(
-                            dict(
-                                y=y1+1,
-                                x=x3,
-                                prediction=prediction,
-                                pred_class=f"x-{steps_x_minus+1}",
-                            )
-                        )
-
-        return prediction_list
+        return ret
 
 
 class ResClassificatorModel(Module):
