@@ -50,9 +50,11 @@ if args.mode == 'train_encoder_context_prediction':
     os.mkdir(model_store_folder)
 
     if res_encoder_weights_path:
+        print(f"Loading res encoder weights from {res_encoder_weights_path}")
         res_encoder_model.load_state_dict(torch.load(res_encoder_weights_path))
 
     if context_predictor_weights_path:
+        print(f"Loading context predictor weights from {context_predictor_weights_path}")
         context_predictor_model.load_state_dict(torch.load(context_predictor_weights_path))
 
     run_context_predictor(args, res_encoder_model, context_predictor_model, model_store_folder)
@@ -73,9 +75,11 @@ if args.mode == 'train_classificator':
     os.mkdir(model_store_folder)
 
     if res_encoder_weights_path:
+        print(f"Loading res encoder weights from {res_encoder_weights_path}")
         res_encoder_model.load_state_dict(torch.load(res_encoder_weights_path))
 
     if res_classificator_weights_path:
+        print(f"Loading classificator weights from {res_classificator_weights_path}")
         res_classificator_model.load_state_dict(torch.load(res_classificator_weights_path))
 
     run_classificator(args, res_classificator_model, res_encoder_model, model_store_folder)

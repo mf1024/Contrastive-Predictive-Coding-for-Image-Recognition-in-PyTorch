@@ -215,7 +215,7 @@ class ResClassificatorModel(Module):
         # Input is [Bxinput_channelsx7x7] shaped tensor
 
         self.num_classes = num_classes
-        self.num_res_blocks = 11
+        self.num_res_blocks = 16
         self.in_channels = in_channels
         self.channels = 1024
 

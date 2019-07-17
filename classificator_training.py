@@ -13,8 +13,8 @@ def run_classificator(args, res_classificator_model, res_encoder_model, models_s
 
     stats_csv_path = os.path.join(models_store_path, "classification_stats.csv")
 
-    EPOCHS = 100
-    LABELS_PER_CLASS = 25
+    EPOCHS = 500
+    LABELS_PER_CLASS = 25 # not used yet
 
     data_loader_train = DataLoader(dataset_train, args.sub_batch_size, shuffle = True)
     data_loader_test = DataLoader(dataset_test, args.sub_batch_size, shuffle = True)
@@ -22,8 +22,9 @@ def run_classificator(args, res_classificator_model, res_encoder_model, models_s
     NUM_TRAIN_SAMPLES = dataset_train.get_number_of_samples()
     NUM_TEST_SAMPLES = dataset_test.get_number_of_samples()
 
-    params = list(res_classificator_model.parameters()) + list(res_encoder_model.parameters())
-    optimizer = torch.optim.Adam(params = params, lr=0.0005)
+    # params = list(res_classificator_model.parameters()) + list(res_encoder_model.parameters())
+    optimizer_enc = torch.optim.Adam(params = res_encoder_model.parameters(), lr = 0.00001) # Train encoder slower than the classifier layers
+    optimizer_cls = torch.optim.Adam(params = res_classificator_model.parameters(), lr = 0.001)
 
     best_epoch_test_loss = 1e10
 
@@ -70,13 +71,16 @@ def run_classificator(args, res_classificator_model, res_encoder_model, models_s
             batch_train_true_positives += torch.sum(pred.argmax(dim=1) == classes)
 
             loss.backward()
-
             sub_batches_processed += img_batch.shape[0]
 
-
             if sub_batches_processed >= args.batch_size:
-                optimizer.step()
-                optimizer.zero_grad()
+
+                optimizer_enc.step()
+                optimizer_cls.step()
+
+                optimizer_enc.zero_grad()
+                optimizer_cls.zero_grad()
+
                 sub_batches_processed = 0
 
                 batch_train_accuracy = float(batch_train_true_positives) / float(args.batch_size)
