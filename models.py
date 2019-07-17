@@ -183,7 +183,7 @@ class ContextPredictionModel(Module):
         context_vect_tensor_for_yp = torch.cat(context_vectors_for_yp, dim=0)
         context_loc_for_yp_t = torch.tensor(context_loc_for_yp)
 
-        context_vect_tensor_for_xp = torch.cat(context_vectors_for_yp, dim=0)
+        context_vect_tensor_for_xp = torch.cat(context_vectors_for_xp, dim=0)
         context_loc_for_xp_t = torch.tensor(context_loc_for_xp)
 
         all_predictions = []
