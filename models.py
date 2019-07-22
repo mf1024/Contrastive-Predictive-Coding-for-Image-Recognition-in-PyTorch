@@ -1,4 +1,5 @@
-from resnet_blocks import ResNetBottleneckBlock
+# from resnet_blocks import ResNetBottleneckBlock
+from se_resnet_blocks import SE_ResNetBottleneckBlock as ResNetBottleneckBlock
 import torch
 from torch import nn
 from torch.nn import Module
