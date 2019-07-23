@@ -8,9 +8,6 @@ class ResEncoderModel(Module):
     def __init__(self):
         super(ResEncoderModel, self).__init__()
 
-        # TODO: ResNet v2
-        # TODO: Squeeze and Excitation
-
         # Input is 3 x 64 x 64
         # prep -> 256 x 32 x 32
 
