@@ -1,5 +1,6 @@
 # from resnet_blocks import ResNetBottleneckBlock
 from se_resnet_blocks import SE_ResNetBottleneckBlock as ResNetBottleneckBlock
+from se_resnet_blocks import SE_ResNetBottleneckBlock_layer_norm
 import torch
 from torch import nn
 from torch.nn import Module
@@ -223,9 +224,9 @@ class ResClassificatorModel(Module):
                 out_channels = self.channels,
                 kernel_size = 1,
                 stride = 1,
-                padding = 1
+                padding = 0
             ),
-            nn.BatchNorm2d(num_features=self.channels),
+            nn.LayerNorm([self.in_channels, 7,7]),
             nn.ReLU()
         )
 
@@ -233,8 +234,9 @@ class ResClassificatorModel(Module):
         for i in range(self.num_res_blocks-1):
             self.res_blocks.add_module(
                 f'res_block_{i}',
-                ResNetBottleneckBlock(
-                    in_channels_block = self.channels
+                SE_ResNetBottleneckBlock_layer_norm(
+                    in_channels_block = self.channels,
+                    act_map_resolution = [7,7]
                 )
             )
 
