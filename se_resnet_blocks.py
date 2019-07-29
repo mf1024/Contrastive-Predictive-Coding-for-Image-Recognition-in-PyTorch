@@ -172,7 +172,7 @@ class SE_ResNetBottleneckBlock(nn.Module):
         x = self.relu_3.forward(x)
         x = self.conv_layer_3.forward(x)
 
-        x = self.squeeze_and_excitation(x)
+        x = self.squeeze_and_excitation.forward(x)
 
         x = x + identity
 
@@ -261,7 +261,7 @@ class SE_ResNetBottleneckBlock_layer_norm(nn.Module):
         x = self.relu_3.forward(x)
         x = self.conv_layer_3.forward(x)
 
-        x = self.squeeze_and_excitation(x)
+        x = self.squeeze_and_excitation.forward(x)
 
         x = x + identity
 

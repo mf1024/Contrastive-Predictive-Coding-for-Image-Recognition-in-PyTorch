@@ -2,7 +2,6 @@ import torch
 import os
 import random
 import csv
-from torch.utils.data import DataLoader
 
 def dot_norm_exp(a,b):
     dot = torch.sum(a * b, dim=1)

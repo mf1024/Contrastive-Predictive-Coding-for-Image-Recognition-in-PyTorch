@@ -1,5 +1,4 @@
 import torch
-import itertools
 from torch.utils.data import DataLoader
 from imagenet_dataset import get_imagenet_datasets
 from helper_functions import get_patch_tensor_from_image_batch, inspect_model, write_csv_stats

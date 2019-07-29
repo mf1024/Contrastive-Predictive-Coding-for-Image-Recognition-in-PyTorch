@@ -250,12 +250,12 @@ class ResClassificatorModel(Module):
 
 
     def forward(self, x):
-        x = self.prep(x)
-        x = self.res_blocks(x)
-        x = self.avg_pool(x)
+        x = self.prep.forward(x)
+        x = self.res_blocks.forward(x)
+        x = self.avg_pool.forward(x)
         x = x.squeeze(dim=3)
         x = x.squeeze(dim=2)
-        x = self.linear(x)
-        x = self.softmax(x)
+        x = self.linear.forward(x)
+        x = self.softmax.forward(x)
 
         return x

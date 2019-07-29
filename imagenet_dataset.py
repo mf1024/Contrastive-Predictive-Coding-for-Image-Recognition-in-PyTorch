@@ -1,7 +1,6 @@
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 from torchvision import transforms
 import os
-from skimage import io
 import numpy as np
 import time
 from PIL import Image

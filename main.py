@@ -1,6 +1,5 @@
 import torch
 
-from torch.utils.data import DataLoader
 from models import ResEncoderModel, ContextPredictionModel, ResClassificatorModel
 from helper_functions import get_next_model_folder, inspect_model, write_csv_stats
 
