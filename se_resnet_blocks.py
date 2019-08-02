@@ -1,4 +1,5 @@
 from torch import nn
+from batch_renormalization import BatchRenormalization2D
 
 class ResNetBlock_v2(nn.Module):
 
@@ -258,6 +259,92 @@ class SE_ResNetBottleneckBlock_layer_norm(nn.Module):
         x = self.conv_layer_2.forward(x)
 
         x = self.layer_norm_3.forward(x)
+        x = self.relu_3.forward(x)
+        x = self.conv_layer_3.forward(x)
+
+        x = self.squeeze_and_excitation.forward(x)
+
+        x = x + identity
+
+        return x
+
+
+class SE_ResNetBottleneckBlock_renorm(nn.Module):
+
+    def __init__(self, in_channels_block, is_downsampling_block = False):
+        super(SE_ResNetBottleneckBlock_renorm, self).__init__()
+
+        self.is_downsampling_block = is_downsampling_block
+        self.in_channels_block = in_channels_block
+        self.bottleneck_channels = in_channels_block // 4
+        self.out_channels_block = self.bottleneck_channels * 4
+        self.layer_1_stride = 1
+
+
+        if self.is_downsampling_block:
+            self.bottleneck_channels *= 2
+            self.out_channels_block *= 2
+            self.layer_1_stride = 2
+
+            self.projection_shortcut = nn.Conv2d(
+                in_channels = self.in_channels_block,
+                out_channels = self.out_channels_block,
+                kernel_size = 1,
+                stride = 2,
+                padding = 0
+            )
+
+
+        self.squeeze_and_excitation = SqueezeAndExcitationBlock(
+            r = 16,
+            channels = self.out_channels_block
+        )
+
+        self.batch_norm_1 = BatchRenormalization2D(self.in_channels_block)
+        self.relu_1 = nn.ReLU()
+        self.conv_layer_1 = nn.Conv2d(
+            in_channels=self.in_channels_block,
+            out_channels=self.bottleneck_channels,
+            kernel_size=1,
+            stride=self.layer_1_stride,
+            padding=0)
+
+        self.batch_norm_2 = BatchRenormalization2D(self.bottleneck_channels)
+        self.relu_2 = nn.ReLU()
+        self.conv_layer_2 = nn.Conv2d(
+            in_channels = self.bottleneck_channels,
+            out_channels = self.bottleneck_channels,
+            kernel_size = 3,
+            stride = 1,
+            padding = 1
+        )
+
+        self.batch_norm_3 = BatchRenormalization2D(self.bottleneck_channels)
+        self.relu_3 = nn.ReLU()
+        self.conv_layer_3 = nn.Conv2d(
+            in_channels = self.bottleneck_channels,
+            out_channels = self.out_channels_block,
+            kernel_size = 1,
+            stride = 1,
+            padding = 0
+        )
+
+    def forward(self,x):
+
+        identity = x
+
+        if self.is_downsampling_block:
+            identity = self.projection_shortcut.forward(identity)
+
+        x = self.batch_norm_1.forward(x)
+        x = self.relu_1.forward(x)
+        x = self.conv_layer_1.forward(x)
+
+        x = self.batch_norm_2.forward(x)
+        x = self.relu_2.forward(x)
+        x = self.conv_layer_2.forward(x)
+
+        x = self.batch_norm_3.forward(x)
         x = self.relu_3.forward(x)
         x = self.conv_layer_3.forward(x)
 
